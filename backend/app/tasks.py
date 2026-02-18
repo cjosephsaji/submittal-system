@@ -14,13 +14,12 @@ def process_submittal_task(submittal_id: int, project_id: int):
     Celery task to process submittal using AI.
     Runs the async processing logic in a synchronous wrapper.
     """
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        # This shouldn't happen in a standard Celery worker, but good for safety
-        import nest_asyncio
-        nest_asyncio.apply()
-    
-    return loop.run_until_complete(_run_submittal_processing(submittal_id, project_id))
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(_run_submittal_processing(submittal_id, project_id))
+    finally:
+        loop.close()
 
 async def _run_submittal_processing(submittal_id: int, project_id: int):
     db = SessionLocal()
