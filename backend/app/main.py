@@ -29,7 +29,11 @@ async def fix_redirect_location(request, call_next):
     return response
 
 # CORS Configuration
-origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+origins = os.getenv("ALLOWED_ORIGINS", (
+    "http://localhost:3000,"
+    "http://127.0.0.1:3000,"
+    "https://submittal-system.vercel.app"
+)).split(",")
 
 if os.getenv("CORS_ALLOW_ALL", "false").lower() == "true":
     app.add_middleware(
