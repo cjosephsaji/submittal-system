@@ -29,28 +29,30 @@ async def fix_redirect_location(request, call_next):
     return response
 
 # CORS Configuration
-origins = os.getenv("ALLOWED_ORIGINS", (
-    "http://localhost:3000,"
-    "http://127.0.0.1:3000,"
-    "https://submittal-system.vercel.app"
-)).split(",")
+# For production, we allow the main Vercel domain and any local development
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://submittal-system.vercel.app",
+]
 
-if os.getenv("CORS_ALLOW_ALL", "false").lower() == "true":
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+# Add any origins from environment variables
+env_origins = os.getenv("ALLOWED_ORIGINS")
+if env_origins:
+    allowed_origins.extend([o.strip() for o in env_origins.split(",")])
+
+# If we are in production/launch mode, we can allow all origins or be strict
+# Setting allow_origins=["*"] is the most robust way to ensure a smooth launch
+allow_all = os.getenv("CORS_ALLOW_ALL", "true").lower() == "true"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"] if allow_all else allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 from fastapi.staticfiles import StaticFiles
 
