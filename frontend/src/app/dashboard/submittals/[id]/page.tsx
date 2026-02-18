@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import api from "@/lib/api"
+import api, { STATIC_URL } from "@/lib/api"
 import { useAuth } from "@/context/auth-context"
 import { useRouter } from "next/navigation"
 import { ExtractedDataDisplay } from "@/components/ExtractedDataDisplay"
@@ -332,7 +332,7 @@ export default function SubmittalDetailsPage({ params }: { params: Promise<{ id:
                                                                         {requirementDocs.map((doc) => (
                                                                             <a
                                                                                 key={doc.id}
-                                                                                href={`/static/${doc.filename}`}
+                                                                                href={`${STATIC_URL}/${doc.filename}`}
                                                                                 target="_blank"
                                                                                 rel="noreferrer"
                                                                                 className="inline-flex items-center gap-1.5 px-2 py-1 text-xs border border-blue-200 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors group"

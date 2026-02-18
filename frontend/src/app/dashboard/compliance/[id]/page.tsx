@@ -29,7 +29,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 
-import api from "@/lib/api"
+import api, { STATIC_URL } from "@/lib/api"
 import { useAuth } from "@/context/auth-context"
 
 interface VerificationResult {
@@ -43,16 +43,12 @@ interface SubmittalDetail {
     title: string
     submittal_number: string
     status: string
-    material_data: {
-        extracted_text_snippet: string
-        verification_checklist?: VerificationResult[]
-        compliance_analysis: {
-            status: string
-            score: number
-            issues: string[]
-            checked_standards: string[]
-        }
-    }
+    material_data: any;
+    documents: {
+        id: number;
+        filename: string;
+        file_path: string;
+    }[];
 }
 
 export default function ReviewPage() {
@@ -99,7 +95,7 @@ export default function ReviewPage() {
 
     if (!submittal) return <div className="p-8">Loading review interface...</div>
 
-    const fileUrl = `/static/${submittal.title}`
+    const fileUrl = `${STATIC_URL}/${submittal.documents?.[0]?.filename || submittal.title}`;
 
     const analysis = submittal.material_data?.compliance_analysis || {
         status: "UNKNOWN",
@@ -198,7 +194,7 @@ export default function ReviewPage() {
                                     </div>
                                     <div className="text-sm font-medium text-muted-foreground mb-2">Checked Standards:</div>
                                     <div className="flex flex-wrap gap-2">
-                                        {analysis.checked_standards?.map(std => (
+                                        {analysis.checked_standards?.map((std: string) => (
                                             <Badge key={std} variant="secondary">{std}</Badge>
                                         ))}
                                     </div>
@@ -212,7 +208,7 @@ export default function ReviewPage() {
                                     AI Requirement Verification
                                 </h3>
                                 <div className="space-y-2">
-                                    {submittal.material_data?.verification_checklist?.map((res, i) => (
+                                    {submittal.material_data?.verification_checklist?.map((res: any, i: number) => (
                                         <div
                                             key={i}
                                             className={`p-3 border rounded-lg flex items-center justify-between shadow-sm ${res.status === "PASSED" ? "border-green-100 bg-green-50/50" : "border-orange-100 bg-orange-50/50"
@@ -251,7 +247,7 @@ export default function ReviewPage() {
                                     </div>
                                 ) : (
                                     <ul className="space-y-2">
-                                        {analysis.issues?.map((issue, idx) => (
+                                        {analysis.issues?.map((issue: string, idx: number) => (
                                             <li key={idx} className="p-3 bg-red-50 text-red-900 text-sm rounded-md border border-red-100 flex gap-2">
                                                 <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
                                                 {issue}
