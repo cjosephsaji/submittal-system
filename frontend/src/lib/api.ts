@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Always use relative path for client-side to ensure Next.js proxy works with ngrok
-const API_URL = '/api/v1';
+// Use environment variable for production, fallback to relative path for local development proxy
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 const api = axios.create({
     baseURL: API_URL,
