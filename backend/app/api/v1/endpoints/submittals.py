@@ -542,22 +542,37 @@ def delete_submittal(
         if submittal.created_by_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not enough permissions to delete this submittal")
 
-    # Delete associated documents from DB
+    # Capture needed data BEFORE deletion to avoid lazy-loading errors after commit
+    submittal_title = submittal.title
+    submittal_id_val = submittal.id
+
+    # Cascade delete related records manually to satisfy foreign keys
+    from app.models.review import ReviewCycle, ReviewComment
     from app.models.submittal import Document
-    db.query(Document).filter(Document.submittal_id == submittal_id).delete()
     
-    # Delete the submittal
+    # 1. Delete Review Comments (linked to ReviewCycles)
+    review_cycle_ids = [rc.id for rc in db.query(ReviewCycle).filter(ReviewCycle.submittal_id == submittal_id).all()]
+    if review_cycle_ids:
+        db.query(ReviewComment).filter(ReviewComment.review_cycle_id.in_(review_cycle_ids)).delete(synchronize_session=False)
+    
+    # 2. Delete Review Cycles
+    db.query(ReviewCycle).filter(ReviewCycle.submittal_id == submittal_id).delete(synchronize_session=False)
+    
+    # 3. Delete associated documents from DB
+    db.query(Document).filter(Document.submittal_id == submittal_id).delete(synchronize_session=False)
+    
+    # 4. Delete the submittal itself
     db.delete(submittal)
     db.commit()
     
-    # Log the deletion
+    # Log the deletion using the CAPTURED data
     log_audit(
         db=db,
         user_id=current_user.id,
         action="DELETE_SUBMITTAL",
         resource_type="submittal",
-        resource_id=submittal_id,
-        details={"title": submittal.title}
+        resource_id=submittal_id_val,
+        details={"title": submittal_title}
     )
     
     return {"status": "success", "message": "Submittal deleted successfully"}
