@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Plus, Search, FileText } from "lucide-react"
+import { Plus, Search, FileText, Trash2 } from "lucide-react"
 import { format } from "date-fns"
 import { motion } from "framer-motion"
 
@@ -173,11 +173,32 @@ export default function SubmittalsPage() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right align-middle p-4">
-                                            <Link href={`/dashboard/submittals/${item.id}`}>
-                                                <Button variant="outline" size="sm" className="h-8 text-xs font-bold border-slate-200 text-slate-700 hover:bg-slate-100">
-                                                    View Details
+                                            <div className="flex justify-end gap-2">
+                                                <Link href={`/dashboard/submittals/${item.id}`}>
+                                                    <Button variant="outline" size="sm" className="h-8 text-xs font-bold border-slate-200 text-slate-700 hover:bg-slate-100">
+                                                        View Details
+                                                    </Button>
+                                                </Link>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                    onClick={async (e) => {
+                                                        e.preventDefault();
+                                                        if (confirm("Are you sure you want to delete this submittal?")) {
+                                                            try {
+                                                                await api.delete(`submittals/${item.id}`);
+                                                                fetchSubmittals();
+                                                            } catch (error) {
+                                                                console.error("Failed to delete submittal", error);
+                                                                alert("Failed to delete submittal");
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
-                                            </Link>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))

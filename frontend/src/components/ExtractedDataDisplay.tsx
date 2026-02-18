@@ -100,28 +100,46 @@ export function ExtractedDataDisplay({ materialData, aiProcessingStatus }: Extra
     // Helper function to check if object has any data
     const hasData = (obj: any) => obj && Object.values(obj).some(v => v);
 
-    // Safely render any value, handling objects and arrays
-    const renderSafeValue = (value: any): React.ReactNode => {
-        if (!value) return null;
+    // Safely render any value, handling objects and arrays recursively
+    const renderSafeValue = (value: any, depth = 0): React.ReactNode => {
+        if (value === null || value === undefined) return null;
+
+        // Try to parse string as JSON if it looks like one
+        if (typeof value === 'string' && (value.trim().startsWith('{') || value.trim().startsWith('['))) {
+            try {
+                const parsed = JSON.parse(value);
+                return renderSafeValue(parsed, depth);
+            } catch (e) {
+                // Not valid JSON, continue as string
+            }
+        }
 
         if (typeof value === 'object') {
             if (Array.isArray(value)) {
+                if (value.length === 0) return <span className="text-gray-400 italic text-sm">None</span>;
                 return (
-                    <ul className="list-disc list-inside text-sm">
+                    <ul className={`list-disc list-inside text-sm ${depth > 0 ? 'ml-4' : ''}`}>
                         {value.map((item, i) => (
-                            <li key={i}>{renderSafeValue(item)}</li>
+                            <li key={i} className="py-0.5">{renderSafeValue(item, depth + 1)}</li>
                         ))}
                     </ul>
                 );
             }
 
-            // Handle object (like address)
+            // Handle object
+            const entries = Object.entries(value).filter(([_, v]) => v !== null && v !== undefined && v !== '');
+            if (entries.length === 0) return <span className="text-gray-400 italic text-sm">N/A</span>;
+
             return (
-                <div className="space-y-1 text-sm bg-gray-50 p-2 rounded">
-                    {Object.entries(value).map(([k, v]) => (
-                        <div key={k} className="flex gap-2">
-                            <span className="font-medium text-gray-500 uppercase text-xs tracking-wider min-w-[80px] pt-0.5">{k.replace(/_/g, ' ')}:</span>
-                            <span className="flex-1">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                <div className={`space-y-1.5 text-sm ${depth > 0 ? 'bg-black/5 p-3 rounded-md border border-black/5 mt-1' : ''}`}>
+                    {entries.map(([k, v]) => (
+                        <div key={k} className="flex flex-col sm:flex-row gap-1 sm:gap-4">
+                            <span className="font-bold text-gray-500 uppercase text-[10px] tracking-wider sm:min-w-[120px] pt-1">
+                                {k.replace(/_/g, ' ')}:
+                            </span>
+                            <div className="flex-1 text-gray-900 leading-relaxed font-medium">
+                                {renderSafeValue(v, depth + 1)}
+                            </div>
                         </div>
                     ))}
                 </div>
