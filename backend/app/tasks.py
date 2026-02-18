@@ -66,15 +66,22 @@ async def _run_submittal_processing(submittal_id: int, project_id: int):
             if extracted.get("standards"):
                 aggregated_standards.update(extracted["standards"])
         
-        # 3. Combine material info
+        # 3. Combine material info and other data
         combined_material_info = {}
         combined_manufacturer_info = {}
+        combined_document_data = {}
+        all_warnings = []
         
         for extracted in all_extracted_data:
             if not combined_material_info and extracted.get("material_info"):
                 combined_material_info = extracted["material_info"]
             if not combined_manufacturer_info and extracted.get("manufacturer_info"):
                 combined_manufacturer_info = extracted["manufacturer_info"]
+            if not combined_document_data and extracted.get("document_data"):
+                combined_document_data = extracted["document_data"]
+            
+            if extracted.get("warnings"):
+                all_warnings.extend(extracted["warnings"])
         
         # 4. Confidence
         confidence_scores = [
@@ -147,6 +154,8 @@ async def _run_submittal_processing(submittal_id: int, project_id: int):
             "material_info": combined_material_info,
             "manufacturer_info": combined_manufacturer_info,
             "standards": list(aggregated_standards),
+            "document_data": combined_document_data,
+            "warnings": list(set(all_warnings)), # Deduplicate warnings
             "tables": all_tables,
             "verification_checklist": final_verification_checklist,
             "manual_entries": manual_entries,

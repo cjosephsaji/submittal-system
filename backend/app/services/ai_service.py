@@ -589,24 +589,42 @@ If no tables found, return {"tables": []}.
             provider = self.get_provider(db)
             
             prompt = f"""
-Extract the following structured information from the provided document:
+Extract structured information from the provided document. 
+The document could be a technical datasheet, a trade license, a certification, or any construction-related document.
 
-1. **Material Information**:
+1. **Document Identity & General Data** (document_data):
+   - document_type: Type of document (e.g., "Trade License", "Data Sheet", "Test Report", "Material Submittal")
+   - document_number: Any identification number (e.g., License No, Certificate No, Report ID)
+   - issue_date: Date of issuance
+   - expiry_date: Expiry date (CRITICAL for licenses/certificates/insurances)
+   - entities: Entities mentioned (e.g., "NPC Dubai", "Supreme Steel", etc.)
+   - general_info: A dictionary of any other important key-value pairs found in the document.
+
+2. **Material Information** (material_info):
    - name: Material name/type
    - description: Brief technical description
    - grade: Material grade (if applicable)
    - specifications: Key technical specifications
 
-2. **Manufacturer Information**:
+3. **Manufacturer Information** (manufacturer_info):
    - name: Manufacturer/supplier name
    - contact: Contact information (if available)
    - certifications: Any certifications mentioned
 
-3. **Standards**: Array of referenced standards (e.g., ["ASTM A36", "ISO 9001", "BS 5950"])
+4. **Standards**: Array of referenced standards (e.g., ["ASTM A36", "ISO 9001", "BS 5950"])
 
-4. **Confidence Score**: A float between 0.0 and 1.0 indicating extraction confidence
+5. **Warnings & Expiry Issues** (warnings):
+   - Analyze the extracted dates. If the current date is after the expiry_date, add a warning "DOCUMENT EXPIRED".
+   - If expiry is within 30 days, add "EXPIRING SOON".
+   - Add any other issues like "Incomplete information", "Unclear signatures", etc.
+   - Return as a list of strings.
 
-Return a JSON object with these exact keys: material_info, manufacturer_info, standards, extraction_metadata (containing confidence_score).
+6. **Confidence Score**: A float between 0.0 and 1.0.
+
+Return a JSON object with these exact keys: 
+material_info, manufacturer_info, standards, document_data, warnings, extraction_metadata (containing confidence_score).
+
+Current Date for Reference: {os.popen('date').read().strip()}
 
 Document Text:
 {text[:10000]}
@@ -663,6 +681,8 @@ Document Text:
                 "material_info": data.get("material_info", {}),
                 "manufacturer_info": data.get("manufacturer_info", {}),
                 "standards": data.get("standards", []),
+                "document_data": data.get("document_data", {}),
+                "warnings": data.get("warnings", []),
                 "extraction_metadata": {
                     **data.get("extraction_metadata", {"confidence_score": 0.5}),
                     "provider": provider
@@ -681,6 +701,8 @@ Document Text:
             "material_info": {},
             "manufacturer_info": {},
             "standards": [],
+            "document_data": {},
+            "warnings": [],
             "tables": [],
             "extraction_metadata": {
                 "confidence_score": 0.0,
@@ -697,6 +719,8 @@ Document Text:
             "material_info": {},
             "manufacturer_info": {},
             "standards": [],
+            "document_data": {},
+            "warnings": [],
             "extraction_metadata": {
                 "confidence_score": 0.0,
                 "extraction_method": "AI Extraction Failed"
