@@ -7,6 +7,10 @@ from openai import OpenAI
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.system_setting import SystemSetting
+try:
+    import pymupdf as fitz
+except ImportError:
+    fitz = None
 
 class AIService:
     def __init__(self):
@@ -300,11 +304,21 @@ class AIService:
             reader = pypdf.PdfReader(pdf_path)
             text = ""
             for page in reader.pages:
-                text += page.extract_text() + "\n"
+                page_text = page.extract_text()
+                # Simple check for garbled/PUA text
+                if page_text:
+                    text += page_text + "\n"
+            
+            # If text is nearly empty or looks like garbage (lots of PUA characters)
+            pua_chars = sum(1 for c in text if '\uf000' <= c <= '\uf8ff')
+            if len(text.strip()) < 10 or (len(text) > 0 and pua_chars / len(text) > 0.3):
+                print(f"Detected low quality or garbled text in {pdf_path}. Falling back to visual analysis.")
+                return "" # Return empty to trigger visual fallback
+                
             return text
         except Exception as e:
             print(f"Error extracting text: {e}")
-            return "Text extraction failed."
+            return ""
 
     def _mock_analyze_compliance(self, error_msg: str = "") -> dict:
         return {
@@ -345,21 +359,54 @@ class AIService:
     async def _extract_from_pdf(self, pdf_path: str, db: Session = None) -> dict:
         """
         Extract structured data from PDF including tables and metadata.
+        Uses visual analysis if text extraction is poor.
         """
         # Extract text
         text = self._extract_text(pdf_path)
         
+        # If text is poor, render first 2 pages as images for Vision
+        image_paths = []
+        if not text or len(text.strip()) < 100:
+            image_paths = self._render_pdf_to_images(pdf_path)
+            
         # Extract tables from PDF
-        tables = await self._extract_tables_from_pdf(pdf_path, db)
+        tables = await self._extract_tables_from_pdf(pdf_path, db, image_paths)
         
-        # Extract material metadata using AI
-        metadata = await self._extract_material_metadata(text, [], db)
+        # Extract material metadata using AI (passing images if available)
+        metadata = await self._extract_material_metadata(text, image_paths, db)
         
+        # Cleanup temporary images
+        for path in image_paths:
+            try: os.remove(path)
+            except: pass
+            
         return {
             **metadata,
             "tables": tables,
             "source_file": os.path.basename(pdf_path)
         }
+    
+    def _render_pdf_to_images(self, pdf_path: str, max_pages: int = 2) -> list:
+        """
+        Renders PDF pages to temporary images for vision analysis.
+        """
+        if not fitz:
+            return []
+            
+        image_paths = []
+        try:
+            doc = fitz.open(pdf_path)
+            for i in range(min(max_pages, len(doc))):
+                page = doc.load_page(i)
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 2x zoom for better OCR
+                img_path = f"{pdf_path}_page_{i}.png"
+                pix.save(img_path)
+                image_paths.append(img_path)
+            doc.close()
+        except Exception as e:
+            print(f"Error rendering PDF to images: {e}")
+            
+        return image_paths
     
     async def _extract_from_image(self, image_path: str, db: Session = None) -> dict:
         """
@@ -428,31 +475,34 @@ class AIService:
             "column_count": len(df.columns)
         }
     
-    async def _extract_tables_from_pdf(self, pdf_path: str, db: Session = None) -> list:
+    async def _extract_tables_from_pdf(self, pdf_path: str, db: Session = None, provided_image_paths: list = None) -> list:
         """
         Extract tables from PDF using AI vision on each page.
         """
         try:
             provider = self.get_provider(db)
-            import pypdf
-            from PIL import Image
-            import io
-            
-            reader = pypdf.PdfReader(pdf_path)
             all_tables = []
             
-            # Process first 10 pages max to avoid excessive processing time
-            max_pages = min(10, len(reader.pages))
-            
-            for page_num in range(max_pages):
-                page = reader.pages[page_num]
-                
-                # Try to extract text-based tables first (faster)
-                page_text = page.extract_text()
-                if self._has_table_indicators(page_text):
-                    # Use AI to parse tables from text
-                    tables = await self._parse_tables_with_ai(page_text, page_num + 1, provider)
+            # If we have images (from fallback), use them first
+            if provided_image_paths:
+                for img_path in provided_image_paths:
+                    tables = await self._extract_tables_from_image(img_path, db)
                     all_tables.extend(tables)
+                if all_tables:
+                    return all_tables
+
+            # Otherwise fallback to text parsing (if allowed)
+            try:
+                reader = pypdf.PdfReader(pdf_path)
+                max_pages = min(5, len(reader.pages))
+                for page_num in range(max_pages):
+                    page = reader.pages[page_num]
+                    page_text = page.extract_text()
+                    if page_text and self._has_table_indicators(page_text):
+                        tables = await self._parse_tables_with_ai(page_text, page_num + 1, provider)
+                        all_tables.extend(tables)
+            except:
+                pass
             
             return all_tables
             
