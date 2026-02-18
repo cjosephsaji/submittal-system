@@ -93,11 +93,19 @@ async def _run_submittal_processing(submittal_id: int, project_id: int):
         # 5. Extract text for verification
         full_text = ""
         img_paths = []
+        transient_images = [] # Images rendered from PDFs to be deleted after
         for doc in docs:
             ext = doc.file_path.lower().split('.')[-1]
             if ext == 'pdf':
-                extracted_text = ai_service._extract_text(doc.file_path)
-                full_text += f"\n--- Document: {doc.filename} ---\n{extracted_text}"
+                extracted_text, is_poor = ai_service._extract_text(doc.file_path)
+                if is_poor:
+                    pdf_images = ai_service._render_pdf_to_images(doc.file_path, max_pages=3)
+                    img_paths.extend(pdf_images)
+                    transient_images.extend(pdf_images)
+                    # Use a placeholder so AI knows to check images
+                    full_text += f"\n--- Document: {doc.filename} ---\n[Garbled or missing text. Use provided visual pages.]\n"
+                else:
+                    full_text += f"\n--- Document: {doc.filename} ---\n{extracted_text}"
             elif ext in ['jpg', 'jpeg', 'png', 'webp']:
                 img_paths.append(doc.file_path)
         
@@ -110,6 +118,7 @@ async def _run_submittal_processing(submittal_id: int, project_id: int):
                 ProjectRequirement.category == ""
             )
         ).all()
+
         
         req_dicts = [{"id": r.id, "field_name": r.field_name, "description": r.description} for r in requirements]
         
@@ -171,6 +180,11 @@ async def _run_submittal_processing(submittal_id: int, project_id: int):
         submittal.ai_processing_status = "COMPLETED"
         db.commit()
         
+        # Cleanup transient images
+        for img_path in transient_images:
+            try: os.remove(img_path)
+            except: pass
+            
         # Log completion
         passed_count = sum(1 for r in final_verification_checklist if r.get("status") == "PASSED")
         log_submittal_event(
@@ -196,4 +210,9 @@ async def _run_submittal_processing(submittal_id: int, project_id: int):
             submittal.material_data = {"error": str(e)}
             db.commit()
     finally:
+        # Cleanup any remaining transient images
+        if 'transient_images' in locals():
+            for img_path in transient_images:
+                try: os.remove(img_path)
+                except: pass
         db.close()

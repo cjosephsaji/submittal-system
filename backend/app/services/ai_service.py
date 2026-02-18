@@ -299,28 +299,32 @@ class AIService:
             results.append(result)
         return results
 
-    def _extract_text(self, pdf_path: str) -> str:
+    def _extract_text(self, pdf_path: str) -> tuple[str, bool]:
+        """
+        Extract text and determine if it's of poor quality.
+        Returns: (text, is_poor)
+        """
         try:
             reader = pypdf.PdfReader(pdf_path)
             text = ""
             for page in reader.pages:
                 page_text = page.extract_text()
-                # Simple check for garbled/PUA text
                 if page_text:
                     text += page_text + "\n"
             
-            # If text is nearly empty or looks like garbage (lots of PUA characters)
+            # Detect poor quality: empty, too short, or garbled (PUA characters)
             pua_chars = sum(1 for c in text if '\uf000' <= c <= '\uf8ff')
             is_garbage = (len(text) > 0 and pua_chars / len(text) > 0.3)
+            is_poor = len(text.strip()) < 50 or is_garbage
             
-            if len(text.strip()) < 10 or is_garbage:
-                print(f"--- [AI SERVICE] --- Detected poor text quality in {pdf_path} (Garbage: {is_garbage}). Falling back to visual analysis.")
-                return "" # Return empty to trigger visual fallback
+            if is_poor:
+                print(f"--- [AI SERVICE] --- Detected poor text quality in {pdf_path}. Garbage: {is_garbage}. Text length: {len(text)}. Using visual fallback.")
+                return text, True
                 
-            return text
+            return text, False
         except Exception as e:
             print(f"Error extracting text: {e}")
-            return ""
+            return "", True
 
     def _mock_analyze_compliance(self, error_msg: str = "") -> dict:
         return {
@@ -363,13 +367,16 @@ class AIService:
         Extract structured data from PDF including tables and metadata.
         Uses visual analysis if text extraction is poor.
         """
-        # Extract text
-        text = self._extract_text(pdf_path)
+        # Extract text and check quality
+        text, is_poor = self._extract_text(pdf_path)
         
-        # If text is poor, render first 2 pages as images for Vision
+        # If text is poor, render first 3 pages as images for Vision
         image_paths = []
-        if not text or len(text.strip()) < 100:
-            image_paths = self._render_pdf_to_images(pdf_path)
+        if is_poor:
+            image_paths = self._render_pdf_to_images(pdf_path, max_pages=3)
+            # If we rely on images, we clear garbled text to avoid confusing the AI
+            if sum(1 for c in text if '\uf000' <= c <= '\uf8ff') / (len(text) if text else 1) > 0.3:
+                text = "[Digital text extraction failed. Please use provided images.]"
             
         # Extract tables from PDF
         tables = await self._extract_tables_from_pdf(pdf_path, db, image_paths)
@@ -400,13 +407,13 @@ class AIService:
             doc = fitz.open(pdf_path)
             for i in range(min(max_pages, len(doc))):
                 page = doc.load_page(i)
-                # 3x zoom for higher detail on small text usually found in licenses
-                pix = page.get_pixmap(matrix=fitz.Matrix(3, 3)) 
+                # 4x zoom for high-fidelity OCR on complex documents
+                pix = page.get_pixmap(matrix=fitz.Matrix(4, 4)) 
                 img_path = f"{pdf_path}_page_{i}.png"
                 pix.save(img_path)
                 image_paths.append(img_path)
             doc.close()
-            print(f"--- [AI SERVICE] --- Rendered {len(image_paths)} pages of {pdf_path} to images.")
+            print(f"--- [AI SERVICE] --- Successfully rendered {len(image_paths)} pages for visual analysis.")
         except Exception as e:
             print(f"Error rendering PDF to images: {e}")
             
@@ -644,18 +651,18 @@ If no tables found, return {"tables": []}.
             
             prompt = f"""
 Extract structured information from the provided document. 
-The document could be a technical datasheet, a trade license, a certification, or any construction-related document.
+The document could be a technical datasheet, a trade license, a certification, a test report, or any construction-related document.
 
-IMPORTANT: If 'Document Text' is empty or garbled, use the provided IMAGES for analysis. 
-Analyze the visual content, stamps, signatures, and headers carefully.
+IMPORTANT: If 'Document Text' is empty, garbled, or contains many unknown characters, PRIORITIZE the provided IMAGES for analysis. 
+Analyze the visual content, watermarks, stamps, signatures, tables, and headers carefully.
 
 1. **Document Identity & General Data** (document_data):
-   - document_type: Type of document (e.g., "Trade License", "Data Sheet", "Test Report", "Material Submittal")
-   - document_number: Any identification number (e.g., License No, Certificate No, Report ID)
-   - issue_date: Date of issuance
-   - expiry_date: Expiry date (CRITICAL for licenses/certificates/insurances)
-   - entities: Entities mentioned (e.g., "NPC Dubai", "Supreme Steel", etc.)
-   - general_info: A dictionary of any other important key-value pairs found in the document.
+   - document_type: Precise type (e.g., "Trade License", "Data Sheet", "Test Report", "Certificate of Compliance")
+   - document_number: Registration Number, License Number, Report ID, etc.
+   - issue_date: Date of issuance (look for stamps/headers)
+   - expiry_date: Expiry/Validity date (CRITICAL for licenses/certificates). If not found, look for "Valid until" or similar terms.
+   - entities: Entities mentioned (e.g., "NPC Dubai", "Supreme Steel", "Dubai Municipality", etc.)
+   - general_info: A dictionary of any other key parameters (e.g., "Location", "Category", "Activity").
 
 2. **Material Information** (material_info):
    - name: Material name/type
