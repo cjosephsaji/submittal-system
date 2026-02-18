@@ -61,6 +61,7 @@ export default function NewSubmittalPage() {
     }>>({})
     const [submittalId, setSubmittalId] = useState<number | null>(null)
     const [isSubmittingAll, setIsSubmittingAll] = useState(false)
+    const [showMissingRequirementsWarning, setShowMissingRequirementsWarning] = useState(false)
 
     useEffect(() => {
         if (user && user.role !== "supplier") {
@@ -172,9 +173,22 @@ export default function NewSubmittalPage() {
     // Simplified submission check: Ready if at least one file is selected/uploaded OR manual value entered
     const isReadyToSubmit = Object.values(taskStates).some(t => t.files.length > 0 || t.manualValue !== "")
 
-    const handleFinalConfirm = async () => {
+    const handleFinalConfirm = async (skipWarning = false) => {
         if (!selectedProject) return
+
+        // 1. Check for missing requirements in this category
+        const missingReqs = filteredRequirements.filter(req => {
+            const task = taskStates[req.id]
+            return (!task || (task.files.length === 0 && !task.manualValue))
+        })
+
+        if (missingReqs.length > 0 && !skipWarning) {
+            setShowMissingRequirementsWarning(true)
+            return
+        }
+
         setIsSubmittingAll(true)
+        setShowMissingRequirementsWarning(false)
         try {
             // Create submittal with files linked to requirements
             const formData = new FormData()
@@ -314,7 +328,7 @@ export default function NewSubmittalPage() {
                             size="lg"
                             className="shadow-lg px-8 font-bold bg-blue-600 hover:bg-blue-700"
                             disabled={!isReadyToSubmit || isSubmittingAll}
-                            onClick={handleFinalConfirm}
+                            onClick={() => handleFinalConfirm()}
                         >
                             {isSubmittingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                             Submit to Contractor
@@ -430,6 +444,55 @@ export default function NewSubmittalPage() {
                     </div>
                 </div>
             )}
+            {/* Missing Requirements Warning Dialog */}
+            <Dialog
+                open={showMissingRequirementsWarning}
+                onOpenChange={setShowMissingRequirementsWarning}
+            >
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <div className="flex items-center gap-2 text-orange-600 mb-2">
+                            <AlertTriangle className="h-6 w-6" />
+                            <DialogTitle>Incomplete Requirements</DialogTitle>
+                        </div>
+                        <DialogDescription className="text-gray-600">
+                            You haven't uploaded documents or values for all requirements in this category:
+                            <div className="mt-3 space-y-2 max-h-40 overflow-y-auto px-1">
+                                {filteredRequirements.filter(req => {
+                                    const task = taskStates[req.id]
+                                    return (!task || (task.files.length === 0 && !task.manualValue))
+                                }).map(req => (
+                                    <div key={req.id} className="text-xs font-bold text-gray-800 flex items-center gap-2 bg-orange-50 p-2 rounded">
+                                        <div className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                                        {req.field_name}
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="mt-4 font-semibold text-gray-900">
+                                Are you sure you want to submit this incomplete bundle to the contractor?
+                            </p>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setShowMissingRequirementsWarning(false)}>Go Back</Button>
+                        <Button
+                            onClick={() => handleFinalConfirm(true)}
+                            className="bg-orange-600 hover:bg-orange-700 font-bold"
+                        >
+                            Yes, Submit Anyway
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }
+
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog"

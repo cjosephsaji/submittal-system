@@ -303,6 +303,7 @@ export default function SubmittalDetailsPage({ params }: { params: Promise<{ id:
                                                         </div>
                                                     </td>
 
+
                                                     {/* Status */}
                                                     <td className="px-6 py-5 text-center">
                                                         {check.status === "PASSED" ? (
@@ -311,14 +312,19 @@ export default function SubmittalDetailsPage({ params }: { params: Promise<{ id:
                                                                 <span className="text-xs font-bold text-green-700 uppercase tracking-wide">Verified</span>
                                                             </div>
                                                         ) : (
-                                                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-100 border border-orange-300">
-                                                                <AlertCircle className="h-4 w-4 text-orange-600" />
-                                                                <span className="text-xs font-bold text-orange-700 uppercase tracking-wide">Not Found</span>
+                                                            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border ${(submittal.documents?.filter(d => d.requirement_id === check.requirement_id).length === 0 && !check.manual_value)
+                                                                    ? "bg-red-50 border-red-200 text-red-700"
+                                                                    : "bg-orange-50 border-orange-200 text-orange-700"
+                                                                }`}>
+                                                                <AlertCircle className={`h-4 w-4 ${(submittal.documents?.filter(d => d.requirement_id === check.requirement_id).length === 0 && !check.manual_value) ? "text-red-600" : "text-orange-600"}`} />
+                                                                <span className="text-[10px] font-bold uppercase tracking-wide">
+                                                                    {(submittal.documents?.filter(d => d.requirement_id === check.requirement_id).length === 0 && !check.manual_value)
+                                                                        ? "MISSING"
+                                                                        : "Not Found"}
+                                                                </span>
                                                             </div>
                                                         )}
                                                     </td>
-
-                                                    {/* Evidence/Documents */}
                                                     <td className="px-6 py-5">
                                                         {(() => {
                                                             // Filter documents for this specific requirement

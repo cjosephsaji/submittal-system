@@ -311,8 +311,10 @@ class AIService:
             
             # If text is nearly empty or looks like garbage (lots of PUA characters)
             pua_chars = sum(1 for c in text if '\uf000' <= c <= '\uf8ff')
-            if len(text.strip()) < 10 or (len(text) > 0 and pua_chars / len(text) > 0.3):
-                print(f"Detected low quality or garbled text in {pdf_path}. Falling back to visual analysis.")
+            is_garbage = (len(text) > 0 and pua_chars / len(text) > 0.3)
+            
+            if len(text.strip()) < 10 or is_garbage:
+                print(f"--- [AI SERVICE] --- Detected poor text quality in {pdf_path} (Garbage: {is_garbage}). Falling back to visual analysis.")
                 return "" # Return empty to trigger visual fallback
                 
             return text
@@ -398,11 +400,13 @@ class AIService:
             doc = fitz.open(pdf_path)
             for i in range(min(max_pages, len(doc))):
                 page = doc.load_page(i)
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 2x zoom for better OCR
+                # 3x zoom for higher detail on small text usually found in licenses
+                pix = page.get_pixmap(matrix=fitz.Matrix(3, 3)) 
                 img_path = f"{pdf_path}_page_{i}.png"
                 pix.save(img_path)
                 image_paths.append(img_path)
             doc.close()
+            print(f"--- [AI SERVICE] --- Rendered {len(image_paths)} pages of {pdf_path} to images.")
         except Exception as e:
             print(f"Error rendering PDF to images: {e}")
             
@@ -641,6 +645,9 @@ If no tables found, return {"tables": []}.
             prompt = f"""
 Extract structured information from the provided document. 
 The document could be a technical datasheet, a trade license, a certification, or any construction-related document.
+
+IMPORTANT: If 'Document Text' is empty or garbled, use the provided IMAGES for analysis. 
+Analyze the visual content, stamps, signatures, and headers carefully.
 
 1. **Document Identity & General Data** (document_data):
    - document_type: Type of document (e.g., "Trade License", "Data Sheet", "Test Report", "Material Submittal")
