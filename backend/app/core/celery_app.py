@@ -12,7 +12,8 @@ if redis_url.startswith("rediss://"):
 celery_app = Celery(
     "worker",
     broker=redis_url,
-    backend=redis_url
+    backend=redis_url,
+    include=["app.tasks"]
 )
 
 celery_app.conf.task_routes = {
