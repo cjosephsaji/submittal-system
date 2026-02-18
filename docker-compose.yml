@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: submittal_backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/submittal_system
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    build: ./backend
+    container_name: submittal_worker
+    command: celery -A app.core.celery_app worker --loglevel=info --queues=main-queue
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/submittal_system
+      - REDIS_URL=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: submittal_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      - WATCHPACK_POLLING=true
+    depends_on:
+      - backend
+
+  db:
+    image: postgres:15-alpine
+    container_name: submittal_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=submittal_system
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:alpine
+    container_name: submittal_redis
+    ports:
+      - "6379:6379"
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:
