@@ -268,9 +268,14 @@ class AIService:
             return results if results else []
                 
         except Exception as e:
-            print(f"Verification AI Error: {e}")
+            error_msg = f"Verification AI Error: {str(e)}"
+            print(error_msg)
             # Fallback to smart keyword matching if AI fails
-            return self._verify_compliance_matrix_fallback(context_str, requirements)
+            fallback_results = self._verify_compliance_matrix_fallback(context_str, requirements)
+            # Attach error to the first item for visibility if possible
+            if fallback_results:
+                fallback_results[0]["extraction_error"] = error_msg
+            return fallback_results
 
     def _verify_compliance_matrix_fallback(self, text: str, requirements: list) -> list:
         text_lower = text.lower()
@@ -304,10 +309,11 @@ class AIService:
     def _mock_analyze_compliance(self, error_msg: str = "") -> dict:
         return {
             "status": "PENDING_REVIEW",
-            "summary": f"Automated analysis failed or skipped. Reason: {error_msg}",
-            "issues": ["AI processing error"],
+            "summary": f"Automated analysis failed or skipped.",
+            "issues": [f"AI error: {error_msg}"],
             "checked_standards": [],
-            "confidence_score": 0.0
+            "confidence_score": 0.0,
+            "extraction_error": error_msg
         }
 
     # =============================================================================
@@ -657,7 +663,10 @@ Document Text:
                 "material_info": data.get("material_info", {}),
                 "manufacturer_info": data.get("manufacturer_info", {}),
                 "standards": data.get("standards", []),
-                "extraction_metadata": data.get("extraction_metadata", {"confidence_score": 0.5})
+                "extraction_metadata": {
+                    **data.get("extraction_metadata", {"confidence_score": 0.5}),
+                    "provider": provider
+                }
             }
             
         except Exception as e:

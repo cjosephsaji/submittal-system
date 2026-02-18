@@ -53,7 +53,9 @@ async def _run_submittal_processing(submittal_id: int, project_id: int):
         aggregated_standards = set()
         
         for doc in docs:
+            print(f"--- Starting extraction for: {doc.filename} ---")
             extracted = await ai_service.extract_structured_data(doc.file_path, db)
+            print(f"--- Extraction finished for: {doc.filename} ---")
             all_extracted_data.append(extracted)
             
             if extracted.get("tables"):
