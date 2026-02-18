@@ -520,3 +520,44 @@ async def resubmit_submittal(
     )
     
     return submittal
+
+@router.delete("/{submittal_id}")
+def delete_submittal(
+    submittal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> Any:
+    """
+    Delete a submittal.
+    Role required: Admin or the Supplier who created it.
+    """
+    submittal = db.query(Submittal).filter(Submittal.id == submittal_id).first()
+    if not submittal:
+        raise HTTPException(status_code=404, detail="Submittal not found")
+    
+    # Permission Check
+    # Super Admins and Consultant Admins can delete anything
+    # Suppliers can only delete their own submittals
+    if current_user.role not in [UserRole.SUPER_ADMIN, UserRole.CONSULTANT_ADMIN]:
+        if submittal.created_by_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not enough permissions to delete this submittal")
+
+    # Delete associated documents from DB
+    from app.models.submittal import Document
+    db.query(Document).filter(Document.submittal_id == submittal_id).delete()
+    
+    # Delete the submittal
+    db.delete(submittal)
+    db.commit()
+    
+    # Log the deletion
+    log_audit(
+        db=db,
+        user_id=current_user.id,
+        action="DELETE_SUBMITTAL",
+        resource_type="submittal",
+        resource_id=submittal_id,
+        details={"title": submittal.title}
+    )
+    
+    return {"status": "success", "message": "Submittal deleted successfully"}
